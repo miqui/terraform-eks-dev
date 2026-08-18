@@ -1,9 +1,9 @@
 region   = "us-east-1"
 cluster_name = "dev-eks-cluster"
 
-# Restrict cluster endpoint to your IP — replace with your actual IP
-# endpoint_public_access_cidrs = ["203.0.113.10/32"]
-endpoint_public_access_cidrs = ["0.0.0.0/0"]
+# Auto-detected at apply time — leave empty to use your local public IP
+# Or set explicitly: endpoint_public_access_cidrs = ["203.0.113.10/32"]
+endpoint_public_access_cidrs = []
 
 vpc_cidr = "10.0.0.0/16"
 

@@ -11,9 +11,9 @@ variable "cluster_name" {
 }
 
 variable "endpoint_public_access_cidrs" {
-  description = "List of CIDR blocks allowed to access the public cluster endpoint"
+  description = "List of CIDR blocks allowed to access the public cluster endpoint. If empty, the local public IP is auto-detected."
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = []
 }
 
 variable "vpc_cidr" {

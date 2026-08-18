@@ -10,6 +10,15 @@ module "network" {
   }
 }
 
+# Auto-detect local public IP for the cluster endpoint allowlist
+data "http" "local_public_ip" {
+  url = "https://api.ipify.org"
+}
+
+locals {
+  endpoint_public_access_cidrs = length(var.endpoint_public_access_cidrs) > 0 ? var.endpoint_public_access_cidrs : ["${chomp(data.http.local_public_ip.response_body)}/32"]
+}
+
 module "eks" {
   source = "../../modules/eks"
 
@@ -17,7 +26,7 @@ module "eks" {
   region                      = var.region
   vpc_id                      = module.network.vpc_id
   subnet_ids                  = module.network.private_subnet_ids
-  endpoint_public_access_cidrs = var.endpoint_public_access_cidrs
+  endpoint_public_access_cidrs = local.endpoint_public_access_cidrs
   node_instance_type          = var.node_instance_type
   node_desired_capacity       = var.node_desired_capacity
   node_min_capacity           = var.node_min_capacity

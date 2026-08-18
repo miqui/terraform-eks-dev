@@ -24,8 +24,8 @@ Internet ──► ALB (AWS LBC) ──► Ingress ──► Service ──► P
 ## Prerequisites
 
 - AWS account with permissions to create VPC, EKS, IAM, and CloudWatch resources
-- Terraform >= 1.5 installed on your **validation host** (not the Hermes orchestration host)
-- `kubectl` and `aws` CLI on the host where you apply
+- Terraform >= 1.5 installed locally (provisioning runs from your machine)
+- `kubectl` and `aws` CLI installed locally
 - S3 bucket for remote state (or use local state for ephemeral use — see below)
 
 ## Quick Start
@@ -51,12 +51,13 @@ cd envs/dev
 terraform init -reconfigure
 ```
 
-### 2. Configure kubectl access
+### 2. Configure endpoint access (auto-detected by default)
 
-Update `terraform.tfvars` with your IP for the endpoint allowlist:
+The cluster endpoint allowlist auto-detects your local public IP at apply time via `api.ipify.org`. Leave `endpoint_public_access_cidrs = []` in `terraform.tfvars` to use this.
 
+To override with a specific IP:
 ```hcl
-endpoint_public_access_cidrs = ["YOUR.IP.HERE/32"]
+endpoint_public_access_cidrs = ["203.0.113.10/32"]
 ```
 
 ### 3. Validate
@@ -147,12 +148,11 @@ terraform-eks-dev/
 └── README.md
 ```
 
-## Validation Host
+## Validation
 
-Terraform CLI is **not installed** on the Hermes orchestration host. Run `terraform fmt`, `validate`, and `plan` on a designated host with Terraform installed.
+Run validation locally before applying:
 
 ```bash
-# On the validation host:
 ./scripts/validate.sh
 
 # For a full plan:
