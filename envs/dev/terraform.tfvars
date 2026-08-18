@@ -14,7 +14,3 @@ node_max_capacity     = 3
 
 log_retention_days  = 7
 lbc_chart_version   = "1.4.8"
-
-db_instance_class = "db.t4.micro"
-db_name           = "appdb"
-db_username       = "postgres"

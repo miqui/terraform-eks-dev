@@ -57,21 +57,3 @@ variable "lbc_chart_version" {
   type        = string
   default     = "1.4.8"
 }
-
-variable "db_instance_class" {
-  description = "RDS instance class for dev"
-  type        = string
-  default     = "db.t4.micro"
-}
-
-variable "db_name" {
-  description = "Name of the database"
-  type        = string
-  default     = "appdb"
-}
-
-variable "db_username" {
-  description = "Master username for the database"
-  type        = string
-  default     = "postgres"
-}
