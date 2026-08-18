@@ -38,3 +38,18 @@ output "kubectl_config_command" {
   description = "Command to configure kubectl for the cluster"
   value       = "aws eks update-kubeconfig --name ${module.eks.cluster_name} --region ${var.region}"
 }
+
+output "rds_endpoint" {
+  description = "Endpoint of the RDS instance"
+  value       = module.rds.rds_endpoint
+}
+
+output "rds_secret_arn" {
+  description = "Secrets Manager secret ARN for DB credentials"
+  value       = module.rds.rds_secret_arn
+}
+
+output "app_role_arn" {
+  description = "IAM role ARN for application pods (IRSA)"
+  value       = module.app_iam.app_role_arn
+}
