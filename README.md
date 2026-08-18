@@ -28,6 +28,39 @@ Internet ──► ALB (AWS LBC) ──► Ingress ──► Service ──► P
 - `kubectl` and `aws` CLI installed locally
 - S3 bucket for remote state (or use local state for ephemeral use — see below)
 
+## AWS Credentials
+
+Terraform uses the standard AWS SDK credential resolution chain. It tries each source in order and uses the first one it finds:
+
+1. **Environment variables** — `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` (+ `AWS_SESSION_TOKEN` for temp creds)
+2. **Shared credentials file** — `~/.aws/credentials` (`[default]` or a named profile)
+3. **Shared config file** — `~/.aws/config` (region, `source_profile`, `role_arn`, SSO)
+4. **EC2/ECS instance metadata** — IAM instance profile or task role
+5. **EKS IRSA** — web identity token from a pod ServiceAccount
+
+For local dev, you'll typically use option 1 or 2. Verify which credentials Terraform will pick up:
+
+```bash
+aws sts get-caller-identity
+```
+
+If you use a **named profile** (not `[default]`), set it in `envs/dev/providers.tf`:
+
+```hcl
+provider "aws" {
+  region  = var.region
+  profile = "your-profile-name"
+}
+```
+
+If you use **SSO**:
+
+```bash
+aws sso login --profile your-sso-profile
+```
+
+This caches a temporary token that Terraform reads automatically — no key IDs needed.
+
 ## Quick Start
 
 ### 1. Configure state backend
