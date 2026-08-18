@@ -54,37 +54,6 @@ module "ingress" {
   }
 }
 
-module "rds" {
-  source = "../../modules/rds"
-
-  vpc_id                  = module.network.vpc_id
-  private_subnet_ids      = module.network.private_subnet_ids
-  allowed_security_group_id = module.eks.node_security_group_id
-  db_instance_class       = var.db_instance_class
-  db_engine               = "postgres"
-  db_engine_version       = "16"
-  db_name                 = var.db_name
-  db_username             = var.db_username
-  deletion_protection     = false
-
-  tags = {
-    Project     = "terraform-eks-dev"
-    Environment = "dev"
-  }
-}
-
-module "iam_policy_rds" {
-  source = "../../modules/iam-policy-rds"
-
-  rds_instance_arn = module.rds.rds_arn
-  rds_secret_arn   = module.rds.rds_secret_arn
-
-  tags = {
-    Project     = "terraform-eks-dev"
-    Environment = "dev"
-  }
-}
-
 module "app_iam" {
   source = "../../modules/app-iam"
 
@@ -94,10 +63,9 @@ module "app_iam" {
   app_sa_namespace    = "default"
   region              = var.region
 
-  attached_policy_arns = [module.iam_policy_rds.policy_arn]
-
-  secret_arn  = module.rds.rds_secret_arn
-  secret_name = "app-db-credentials"
+  # Empty in the baseline — service access policies are added in separate OpenSpec changes
+  attached_policy_arns = []
+  secret_arn          = null
 
   tags = {
     Project     = "terraform-eks-dev"

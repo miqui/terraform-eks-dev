@@ -25,6 +25,8 @@ variable "region" {
   type        = string
 }
 
+# Empty in the cluster baseline. Service-specific policy modules (e.g. iam-policy-rds,
+# iam-policy-s3) are added in separate OpenSpec changes and their ARNs appended here.
 variable "attached_policy_arns" {
   description = "IAM policy ARNs to attach to the IRSA role"
   type        = list(string)

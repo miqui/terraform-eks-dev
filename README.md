@@ -12,14 +12,20 @@ Internet ──► ALB (AWS LBC) ──► Ingress ──► Service ──► P
           VPC (2 AZs)     EKS Cluster      Managed NG
           Public + Private  1.30            t3.medium × 2
           NAT + IGW         Public EP        On-Demand
+                                │
+                                ▼
+                         Pod IAM (IRSA)
+                         Role + ServiceAccount
+                         (no policies — ready for service access)
 ```
 
 **Modules:**
 - `modules/network/` — VPC, subnets (2 AZ), NAT gateway, IGW, route tables, EKS subnet tags
 - `modules/eks/` — EKS cluster, managed node group, IAM roles, CloudWatch logging
 - `modules/ingress/` — AWS LBC (Helm), IRSA role, default IngressClass
+- `modules/app-iam/` — Generic IRSA role + ServiceAccount (empty policy list — service access added separately)
 
-**Stack:** `envs/dev/` composes all three modules with dev defaults.
+**Stack:** `envs/dev/` composes all four modules with dev defaults.
 
 ## Prerequisites
 
@@ -128,94 +134,47 @@ kubectl get ingress -n default
 curl http://$(kubectl get ingress sample-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 ```
 
-## RDS & Pod DB Access
+## Adding Pod Access to an AWS Service
 
-Application pods can access a PostgreSQL RDS instance using IRSA (IAM Roles for Service Accounts). No long-lived credentials are stored in pod specs.
+The cluster baseline includes a generic IRSA role (`modules/app-iam/`) with an empty `attached_policy_arns` list. To give pods access to an AWS service (RDS, S3, SQS, etc.), create a separate OpenSpec change that adds a policy module and wires it in.
 
-```
-Pod (my-app-sa) ──IRSA──► IAM Role ──► RDS (db.t4.micro)
-     │                              │
-     │                              └── attached_policy_arns
-     │                                    │
-     └── SecretProviderClass ◄────────── iam-policy-rds
-         (mounts DB secret)               (rds-db:connect + secretsmanager)
-```
+**Pattern:**
 
-**Module composition:**
-- `modules/iam-policy-rds/` — creates the IAM policy (`rds-db:connect` + `secretsmanager:GetSecretValue`), outputs `policy_arn`
-- `modules/app-iam/` — creates the IRSA role + ServiceAccount, accepts `attached_policy_arns` list + optional `secret_arn` for SecretProviderClass
-- Dev stack wires them: `iam_policy_rds.policy_arn` → `app_iam.attached_policy_arns`
-
-**Flow:**
-1. Pod runs as `my-app-sa` ServiceAccount (annotated with IRSA role ARN)
-2. IRSA role has the RDS policy attached — grants `rds-db:connect` + secret read
-3. SecretProviderClass mounts the DB password as a Kubernetes Secret (`app-db-credentials`)
-4. Pod reads `app-db-credentials` env vars to connect to RDS
-
-**Prerequisite — CSI driver:**
-Before applying the sample app, install the Secrets Store CSI driver and AWS provider on the cluster:
-
-```bash
-helm repo add secrets-store-provider-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
-helm install -n kube-system csi-secrets-store secrets-store-provider-driver/secrets-store-csi-driver
-
-helm repo add aws https://aws.github.io/eks-charts
-helm install -n kube-system aws-secrets-manager-provider aws/secrets-store-csi-driver-provider-aws
-```
-
-**Deploy the sample app:**
-```bash
-kubectl apply -f k8s/sample/app-deployment.yaml
-kubectl logs deployment/sample-app
-```
-
-## Adding a New AWS Service to a Pod
-
-The `app-iam` module is generic — it creates an IRSA role and ServiceAccount with no service-specific permissions. To give a pod access to a new AWS service:
-
-**1. Create a policy module** (e.g. `modules/iam-policy-s3/`):
+1. **Create a policy module** (e.g. `modules/iam-policy-rds/`):
 ```hcl
-# modules/iam-policy-sds/main.tf
 resource "aws_iam_policy" "this" {
-  name = "terraform-eks-dev-s3-policy"
+  name = "terraform-eks-dev-rds-policy"
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect = "Allow"
-      Action = ["s3:GetObject", "s3:PutObject"]
-      Resource = "arn:aws:s3:::my-app-bucket/*"
+      Action = ["rds-db:connect"]
+      Resource = aws_db_instance.example.arn
     }]
   })
 }
 
-output "policy_arn" {
-  value = aws_iam_policy.this.arn
-}
+output "policy_arn" { value = aws_iam_policy.this.arn }
 ```
 
-**2. Compose in the dev stack:**
+2. **Wire it into the dev stack** (`envs/dev/main.tf`):
 ```hcl
-module "iam_policy_s3" {
-  source = "../../modules/iam-policy-s3"
+module "iam_policy_rds" {
+  source = "../../modules/iam-policy-rds"
   # ... service-specific variables
 }
 
-module "worker_iam" {
-  source = "../../modules/app-iam"
-
-  app_sa_name         = "worker-sa"
-  cluster_name        = module.eks.cluster_name
-  cluster_oidc_issuer = module.eks.cluster_oidc_issuer_url
-  region              = var.region
-
-  attached_policy_arns = [module.iam_policy_s3.policy_arn]
-  # No secret_arn — worker doesn't need secret mounting
+module "app_iam" {
+  # ... existing config
+  attached_policy_arns = [module.iam_policy_rds.policy_arn]
 }
 ```
 
-**3. Deploy your pod** with `serviceAccountName: worker-sa`.
+3. **(Optional) Secret mounting** — if the service uses secrets (e.g. DB password), set `secret_arn` on the `app_iam` module to create a SecretProviderClass.
 
-The pattern is: one policy module per service, one `app-iam` instance per workload.
+4. **Deploy your pod** with `serviceAccountName: my-app-sa`.
+
+One policy module per service. One `app-iam` instance per workload (or reuse the same SA for multiple policies).
 
 ## Tear Down
 
@@ -253,7 +212,8 @@ terraform-eks-dev/
 ├── modules/
 │   ├── network/          # VPC, subnets, NAT, IGW
 │   ├── eks/              # Cluster, node group, IAM, logs
-│   └── ingress/          # LBC, IRSA, IngressClass
+│   ├── ingress/          # LBC, IRSA, IngressClass
+│   └── app-iam/          # Generic IRSA role + ServiceAccount (no policies in baseline)
 ├── envs/
 │   └── dev/              # Dev environment stack
 │       ├── backend.tf
@@ -263,7 +223,7 @@ terraform-eks-dev/
 │       ├── outputs.tf
 │       └── terraform.tfvars
 ├── k8s/
-│   └── sample/           # Sample deployment + service + ingress
+│   └── sample/           # Sample nginx deployment + service + ingress
 ├── scripts/
 │   └── validate.sh       # fmt + validate workflow
 ├── openspec/             # Spec-driven design artifacts
