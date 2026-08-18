@@ -85,6 +85,24 @@ resource "aws_eks_cluster" "this" {
   tags = var.tags
 }
 
+# Security group for EKS nodes
+resource "aws_security_group" "node" {
+  name        = "${var.cluster_name}-node-sg"
+  description = "Security group for EKS node group"
+  vpc_id      = var.vpc_id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(var.tags, {
+    Name = "${var.cluster_name}-node-sg"
+  })
+}
+
 # Managed node group
 resource "aws_eks_node_group" "this" {
   cluster_name    = aws_eks_cluster.this.name
